@@ -26,56 +26,64 @@ function fmtDate(d) {
   return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
 }
 
+// Extract date and return { date, cleanMsg } — removes date tokens from msg so amount parser won't hit them
 function extractDateAndClean(msg) {
   const lower = msg.toLowerCase();
   const today = new Date();
   let date = null;
   let clean = msg;
 
+  // "ayer"
   if (/\bayer\b/.test(lower)) {
     const d = new Date(today); d.setDate(d.getDate()-1);
     date = fmtDate(d);
     clean = clean.replace(/\bayer\b/gi, "");
-  } else if (/\bante\s*ayer\b/.test(lower)) {
+  }
+  // "anteayer"
+  else if (/\bante\s*ayer\b/.test(lower)) {
     const d = new Date(today); d.setDate(d.getDate()-2);
     date = fmtDate(d);
     clean = clean.replace(/\bante\s*ayer\b/gi, "");
-  } else {
+  }
+  // weekdays
+  else {
     const weekdays = [
-      {re:/\bdomingo\b/i,dow:0},{re:/\blunes\b/i,dow:1},{re:/\bmartes\b/i,dow:2},
-      {re:/\bmi[eé]rcoles\b/i,dow:3},{re:/\bjueves\b/i,dow:4},{re:/\bviernes\b/i,dow:5},
-      {re:/\bs[aá]bado\b/i,dow:6}
+      {re:/\bdomingo\b/i, dow:0},{re:/\blunes\b/i, dow:1},{re:/\bmartes\b/i, dow:2},
+      {re:/\bmi[eé]rcoles\b/i, dow:3},{re:/\bjueves\b/i, dow:4},{re:/\bviernes\b/i, dow:5},
+      {re:/\bs[aá]bado\b/i, dow:6}
     ];
-    for (const {re,dow} of weekdays) {
+    for (const {re, dow} of weekdays) {
       if (re.test(lower)) {
         const d = new Date(today);
-        const diff = (d.getDay()-dow+7)%7||7;
+        const diff = (d.getDay() - dow + 7) % 7 || 7;
         d.setDate(d.getDate()-diff);
         date = fmtDate(d);
-        clean = clean.replace(re,"");
+        clean = clean.replace(re, "");
         break;
       }
     }
   }
 
+  // "28 de mayo" / "el 28 de mayo" / "28 de mayo de 2025"
   const longRe = /\b(?:el\s+)?(\d{1,2})\s+de\s+([a-záéíóúü]+)(?:\s+(?:de\s+)?(\d{4}))?\b/gi;
   clean = clean.replace(longRe, (match, day, monthStr, year) => {
     const month = MONTHS[monthStr.toLowerCase()];
-    if (month && parseInt(day)>=1 && parseInt(day)<=31) {
+    if (month && parseInt(day) >= 1 && parseInt(day) <= 31) {
       const y = year ? parseInt(year) : today.getFullYear();
       date = `${String(parseInt(day)).padStart(2,"0")}/${String(month).padStart(2,"0")}/${y}`;
-      return "";
+      return ""; // remove from clean
     }
     return match;
   });
 
+  // "28/05" or "28/05/2025" or "28-05" (only if no date found yet)
   if (!date) {
     const shortRe = /\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/g;
     clean = clean.replace(shortRe, (match, d, m, y) => {
-      const day=parseInt(d), month=parseInt(m);
-      if (day>=1&&day<=31&&month>=1&&month<=12) {
+      const day = parseInt(d), month = parseInt(m);
+      if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
         let year = y ? parseInt(y) : today.getFullYear();
-        if (year<100) year+=2000;
+        if (year < 100) year += 2000;
         date = `${String(day).padStart(2,"0")}/${String(month).padStart(2,"0")}/${year}`;
         return "";
       }
@@ -83,36 +91,49 @@ function extractDateAndClean(msg) {
     });
   }
 
-  return { date: date||fmtDate(today), clean: clean.replace(/\s+/g," ").trim() };
+  return { date: date || fmtDate(today), clean: clean.replace(/\s+/g, " ").trim() };
 }
 
 function detectCategory(text) {
   const lower = text.toLowerCase();
   for (const [cat, keywords] of Object.entries(CATEGORIES)) {
-    if (cat==="otros") continue;
-    if (keywords.some(k=>lower.includes(k))) return cat;
+    if (cat === "otros") continue;
+    if (keywords.some(k => lower.includes(k))) return cat;
   }
   return "otros";
 }
 
-const AMOUNT_SIGNALS = /(\b(son|fue|pagué|pague|gasté|gaste|costó|costo|vale|cuesta|precio|monto|total|por|s\/)\s*)(\d+(?:[.,]\d+)?)/gi;
+// Keywords that indicate "monto" context — amount usually follows these
+const AMOUNT_SIGNALS = /(\b(son|fue|pagué|pague|gasté|gaste|costó|costo|vale|cuesta|precio|monto|total|por|s\/)\s*)(\d+(?:\.\d+)?)/gi;
 
 function parseMessage(original) {
-  const { date, clean } = extractDateAndClean(original);
+  // Replace commas used as text separators before parsing
+  const noCommas = original.replace(/,/g, " ");
+  const { date, clean } = extractDateAndClean(noCommas);
   const category = detectCategory(clean);
+
+  // Try to find amount after signal words first
   let amount = null;
   const signalMatch = [...clean.matchAll(AMOUNT_SIGNALS)];
-  if (signalMatch.length>0) amount = parseFloat(signalMatch[signalMatch.length-1][3].replace(",","."));
-  if (amount===null) {
-    const nums = [...clean.matchAll(/\d+(?:[.,]\d+)?/g)];
-    if (nums.length===0) return null;
-    amount = parseFloat(nums[nums.length-1][0].replace(",","."));
+  if (signalMatch.length > 0) {
+    amount = parseFloat(signalMatch[signalMatch.length-1][3]);
   }
+
+  // Fallback: last standalone number (not part of a word)
+  if (amount === null) {
+    const nums = [...clean.matchAll(/\b\d+(?:\.\d+)?\b/g)];
+    if (nums.length === 0) return null;
+    amount = parseFloat(nums[nums.length-1][0]);
+  }
+
+  // Build description — also remove commas used as separators
   let desc = clean
-    .replace(/\d+(?:[.,]\d+)?/g,"")
-    .replace(/gasté|gaste|compré|compre|pagué|pague|costó|costo|son|fue|vale|cuesta|precio|monto|total|por|en|el|la|los|las|sol(es)?|s\/|pe[ñn]u?/gi,"")
-    .replace(/\s+/g," ").trim() || "Gasto";
-  desc = desc.charAt(0).toUpperCase()+desc.slice(1);
+    .replace(/\d+(?:\.\d+)?/g, "")
+    .replace(/,/g, " ")
+    .replace(/gasté|gaste|compré|compre|pagué|pague|costó|costo|son|fue|vale|cuesta|precio|monto|total|por|en|el|la|los|las|sol(es)?|s\/|pe[ñn]u?/gi, "")
+    .replace(/\s+/g, " ").trim() || "Gasto";
+  desc = desc.charAt(0).toUpperCase() + desc.slice(1);
+
   return { amount, category, desc, date };
 }
 
@@ -132,17 +153,17 @@ const CAT_LIST = Object.keys(CAT_COLORS);
 
 function dateToSortable(d) {
   if (!d) return "";
-  const [dd,mm,yyyy]=d.split("/");
+  const [dd,mm,yyyy] = d.split("/");
   return `${yyyy}${mm}${dd}`;
 }
 function isoToDisplay(iso) {
   if (!iso) return "";
-  const [y,m,d]=iso.split("-");
+  const [y,m,d] = iso.split("-");
   return `${d}/${m}/${y}`;
 }
 function displayToIso(disp) {
   if (!disp) return "";
-  const [d,m,y]=disp.split("/");
+  const [d,m,y] = disp.split("/");
   return `${y}-${m}-${d}`;
 }
 
@@ -151,24 +172,19 @@ const inputStyle = {
   fontSize:13,outline:"none",background:"#fff",width:"100%",boxSizing:"border-box"
 };
 
-const STORAGE_KEY = "gastosbot_expenses";
-
 export default function GastosTracker() {
   const [messages, setMessages] = useState([
-    { from:"bot", text:"¡Hola! 👋 Escríbeme lo que gastaste:\n\n• \"Taxi a Lima 29 de mayo 15 soles\"\n• \"Almuerzo 30 ayer\"\n• \"Netflix 35 el lunes\"\n• \"Farmacia 80 28/05\"\n\nSin fecha → uso hoy 📅\nTus gastos se guardan automáticamente 💾" }
+    { from:"bot", text:"¡Hola! 👋 Escríbeme lo que gastaste y detecto fecha, monto y categoría automáticamente:\n\n• \"Taxi a Sodoma 29 de mayo 15 soles\"\n• \"Almuerzo 30 ayer\"\n• \"Netflix 35 el lunes\"\n• \"Farmacia 80 28/05\"\n\nSin fecha → uso hoy 📅" }
   ]);
   const [input, setInput] = useState("");
-  const [expenses, setExpenses] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
+  const [expenses, setExpenses] = useState([]);
   const [tab, setTab] = useState("chat");
   const [exporting, setExporting] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [storageReady, setStorageReady] = useState(false);
+
   const [fDateFrom, setFDateFrom] = useState("");
   const [fDateTo, setFDateTo] = useState("");
   const [fCats, setFCats] = useState([]);
@@ -179,26 +195,48 @@ export default function GastosTracker() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Persist to localStorage on every change
+  // Load from persistent storage on mount
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses)); } catch {}
-  }, [expenses]);
+    async function load() {
+      try {
+        const result = await window.storage.get("gastos_expenses");
+        if (result && result.value) {
+          const saved = JSON.parse(result.value);
+          if (Array.isArray(saved) && saved.length > 0) {
+            setExpenses(saved);
+            setMessages(prev => [...prev, { from:"bot", text:`📂 Cargué ${saved.length} gasto(s) de tu sesión anterior.\nTotal guardado: S/ ${saved.reduce((s,e)=>s+e.amount,0).toFixed(2)} 💾` }]);
+          }
+        }
+      } catch(e) {}
+      setStorageReady(true);
+    }
+    load();
+  }, []);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages]);
+  // Save to persistent storage whenever expenses change
+  useEffect(() => {
+    if (!storageReady) return;
+    async function save() {
+      try { await window.storage.set("gastos_expenses", JSON.stringify(expenses)); } catch(e) {}
+    }
+    save();
+  }, [expenses, storageReady]);
+
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [messages]);
 
   const filteredExpenses = expenses.filter(e => {
     const ds = dateToSortable(e.date);
     if (fDateFrom && ds < dateToSortable(isoToDisplay(fDateFrom))) return false;
     if (fDateTo && ds > dateToSortable(isoToDisplay(fDateTo))) return false;
-    if (fCats.length>0 && !fCats.includes(e.category)) return false;
-    if (fMinAmount!=="" && e.amount<parseFloat(fMinAmount)) return false;
-    if (fMaxAmount!=="" && e.amount>parseFloat(fMaxAmount)) return false;
+    if (fCats.length > 0 && !fCats.includes(e.category)) return false;
+    if (fMinAmount !== "" && e.amount < parseFloat(fMinAmount)) return false;
+    if (fMaxAmount !== "" && e.amount > parseFloat(fMaxAmount)) return false;
     return true;
   });
 
   const activeFilterCount = [fDateFrom,fDateTo,fCats.length>0?"cat":"",fMinAmount,fMaxAmount].filter(Boolean).length;
   function clearFilters() { setFDateFrom("");setFDateTo("");setFCats([]);setFMinAmount("");setFMaxAmount(""); }
-  function toggleCat(cat) { setFCats(prev=>prev.includes(cat)?prev.filter(c=>c!==cat):[...prev,cat]); }
+  function toggleCat(cat) { setFCats(prev => prev.includes(cat)?prev.filter(c=>c!==cat):[...prev,cat]); }
 
   function sendMessage() {
     const text = input.trim();
@@ -208,13 +246,13 @@ export default function GastosTracker() {
     let botMsg;
     if (parsed) {
       const newExpense = { ...parsed, id:Date.now() };
-      setExpenses(prev=>[...prev,newExpense]);
-      const isToday = parsed.date===fmtDate(new Date());
+      setExpenses(prev => [...prev, newExpense]);
+      const isToday = parsed.date === fmtDate(new Date());
       botMsg = { from:"bot", text:`✅ Registrado!\n\n${CAT_EMOJI[parsed.category]} *${parsed.desc}*\n💰 S/ ${parsed.amount.toFixed(2)}\n📂 ${parsed.category.charAt(0).toUpperCase()+parsed.category.slice(1)}\n📅 ${parsed.date}${isToday?" (hoy)":""}` };
     } else {
       botMsg = { from:"bot", text:"Hmm, no pude detectar el monto 🤔 Prueba: \"Taxi 25\" o \"Almuerzo 30 ayer\"" };
     }
-    setMessages(prev=>[...prev,userMsg,botMsg]);
+    setMessages(prev => [...prev, userMsg, botMsg]);
     setInput("");
     inputRef.current?.focus();
   }
@@ -230,7 +268,7 @@ export default function GastosTracker() {
     const toExport = activeFilterCount>0 ? filteredExpenses : expenses;
     if (toExport.length===0) return;
     setExporting(true);
-    setTimeout(()=>{
+    setTimeout(() => {
       const wb = XLSX.utils.book_new();
       const data = [["Fecha","Descripción","Categoría","Monto (S/)"]];
       toExport.forEach(e=>data.push([e.date,e.desc,e.category.charAt(0).toUpperCase()+e.category.slice(1),e.amount]));
@@ -255,7 +293,7 @@ export default function GastosTracker() {
     },300);
   }
 
-  const ftotal=filteredExpenses.reduce((s,e)=>s+e.amount,0);
+  const ftotal = filteredExpenses.reduce((s,e)=>s+e.amount,0);
   const fbyCat={},fbyDate={};
   filteredExpenses.forEach(e=>{fbyCat[e.category]=(fbyCat[e.category]||0)+e.amount; fbyDate[e.date]=(fbyDate[e.date]||0)+e.amount;});
 
@@ -267,6 +305,7 @@ export default function GastosTracker() {
     <div style={{fontFamily:"'Segoe UI',sans-serif",background:"#0B1426",minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",padding:"16px",boxSizing:"border-box"}}>
       <div style={{width:"100%",maxWidth:"420px",display:"flex",flexDirection:"column",height:"calc(100vh - 32px)",borderRadius:"20px",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.5)",background:"#fff"}}>
 
+        {/* Header */}
         <div style={{background:"linear-gradient(135deg,#25D366 0%,#128C7E 100%)",padding:"14px 16px",display:"flex",alignItems:"center",gap:"12px"}}>
           <div style={{width:40,height:40,borderRadius:"50%",background:"rgba(255,255,255,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>💸</div>
           <div>
@@ -278,7 +317,8 @@ export default function GastosTracker() {
           </div>
         </div>
 
-        {tab==="chat"&&(<>
+        {/* ── CHAT ── */}
+        {tab==="chat" && (<>
           <div style={{flex:1,overflowY:"auto",padding:"12px",background:"#ECE5DD",backgroundImage:"radial-gradient(circle at 1px 1px,rgba(0,0,0,0.04) 1px,transparent 0)",backgroundSize:"20px 20px"}}>
             {messages.map((m,i)=>(
               <div key={i} style={{display:"flex",justifyContent:m.from==="user"?"flex-end":"flex-start",marginBottom:8}}>
@@ -295,7 +335,7 @@ export default function GastosTracker() {
             ))}
           </div>
           <div style={{background:"#F0F0F0",padding:"10px 12px",display:"flex",gap:8,alignItems:"center",borderTop:"1px solid #ddd"}}>
-            <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMessage()} placeholder='Ej: "Almuerzo 25 ayer"' style={{flex:1,border:"none",borderRadius:24,padding:"10px 16px",fontSize:13,outline:"none",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.1)"}}/>
+            <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMessage()} placeholder='Ej: "Taxi a Lima 29 de mayo 15 soles"' style={{flex:1,border:"none",borderRadius:24,padding:"10px 16px",fontSize:13,outline:"none",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.1)"}}/>
             <button onClick={sendMessage} style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#25D366,#128C7E)",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>➤</button>
           </div>
           {expenses.length>0&&(
@@ -305,6 +345,7 @@ export default function GastosTracker() {
           )}
         </>)}
 
+        {/* ── LISTA ── */}
         {tab==="list"&&(
           <div style={{flex:1,overflowY:"auto",background:"#f8f8f8"}}>
             {expenses.length===0?(
@@ -315,12 +356,26 @@ export default function GastosTracker() {
                 <div key={e.id} style={{margin:"0 10px 8px",borderRadius:14,background:"#fff",boxShadow:"0 1px 6px rgba(0,0,0,0.07)",overflow:"hidden"}}>
                   {editingId===e.id?(
                     <div style={{padding:12}}>
-                      <div style={{fontSize:11,fontWeight:700,color:"#128C7E",marginBottom:8}}>✏️ EDITANDO</div>
+                      <div style={{fontSize:11,fontWeight:700,color:"#128C7E",marginBottom:8}}>✏️ EDITANDO — cambia solo lo que quieras</div>
+                      <div style={{fontSize:10,color:"#999",marginBottom:4}}>Descripción</div>
                       <input value={editForm.desc} onChange={ev=>setEditForm(f=>({...f,desc:ev.target.value}))} placeholder="Descripción" style={{...inputStyle,marginBottom:8}}/>
                       <div style={{display:"flex",gap:8,marginBottom:8}}>
-                        <input type="number" value={editForm.amount} onChange={ev=>setEditForm(f=>({...f,amount:ev.target.value}))} placeholder="Monto" style={{...inputStyle}}/>
-                        <input type="date" value={displayToIso(editForm.date)} onChange={ev=>setEditForm(f=>({...f,date:isoToDisplay(ev.target.value)}))} style={{...inputStyle}}/>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:10,color:"#999",marginBottom:4}}>Monto (S/)</div>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={editForm.amount}
+                            onChange={ev=>setEditForm(f=>({...f,amount:ev.target.value}))}
+                            style={{...inputStyle}}
+                          />
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:10,color:"#999",marginBottom:4}}>Fecha</div>
+                          <input type="date" value={displayToIso(editForm.date)} onChange={ev=>setEditForm(f=>({...f,date:isoToDisplay(ev.target.value)}))} style={{...inputStyle}}/>
+                        </div>
                       </div>
+                      <div style={{fontSize:10,color:"#999",marginBottom:4}}>Categoría</div>
                       <select value={editForm.category} onChange={ev=>setEditForm(f=>({...f,category:ev.target.value}))} style={{...inputStyle,marginBottom:10}}>
                         {CAT_LIST.map(c=><option key={c} value={c}>{CAT_EMOJI[c]} {c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
                       </select>
@@ -330,9 +385,10 @@ export default function GastosTracker() {
                       </div>
                     </div>
                   ):confirmDeleteId===e.id?(
+                    /* confirm delete inline */
                     <div style={{padding:"12px 14px",background:"#fff5f5",display:"flex",alignItems:"center",gap:10}}>
                       <div style={{flex:1,fontSize:13,color:"#c62828",fontWeight:600}}>¿Borrar "{e.desc}"?</div>
-                      <button onClick={()=>deleteExpense(e.id)} style={{background:"#e53935",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontWeight:700,cursor:"pointer",fontSize:13}}>Sí</button>
+                      <button onClick={()=>deleteExpense(e.id)} style={{background:"#e53935",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontWeight:700,cursor:"pointer",fontSize:13}}>Sí, borrar</button>
                       <button onClick={()=>setConfirmDeleteId(null)} style={{background:"#eee",color:"#555",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:13}}>No</button>
                     </div>
                   ):(
@@ -349,11 +405,12 @@ export default function GastosTracker() {
                   )}
                 </div>
               ))}
-              <button onClick={exportExcel} style={{margin:"4px 10px 16px",width:"calc(100% - 20px)",background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer"}}>📥 Exportar Excel</button>
+              <button onClick={exportExcel} disabled={exporting} style={{margin:"4px 10px 16px",width:"calc(100% - 20px)",background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer"}}>📥 Exportar Excel</button>
             </>)}
           </div>
         )}
 
+        {/* ── STATS ── */}
         {tab==="stats"&&(
           <div style={{flex:1,overflowY:"auto",background:"#f4f6f8"}}>
             <div style={{padding:"10px 12px 0"}}>
@@ -389,10 +446,10 @@ export default function GastosTracker() {
             </div>
             <div style={{padding:"10px 12px 16px"}}>
               {expenses.length===0?(
-                <div style={{textAlign:"center",color:"#aaa",marginTop:40}}><div style={{fontSize:48}}>📊</div><p>Ve al chat y empieza!</p></div>
+                <div style={{textAlign:"center",color:"#aaa",marginTop:40}}><div style={{fontSize:48}}>📊</div><p>Ve al chat y empieza a registrar!</p></div>
               ):filteredExpenses.length===0?(
                 <div style={{textAlign:"center",color:"#aaa",marginTop:30,background:"#fff",borderRadius:16,padding:24}}>
-                  <div style={{fontSize:36}}>🔍</div><p>Ningún gasto coincide.</p>
+                  <div style={{fontSize:36}}>🔍</div><p>Ningún gasto coincide con los filtros.</p>
                   <button onClick={clearFilters} style={{background:"#128C7E",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontSize:13,fontWeight:700}}>Limpiar filtros</button>
                 </div>
               ):(<>
