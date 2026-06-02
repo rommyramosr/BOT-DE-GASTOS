@@ -7,11 +7,11 @@ const CATEGORIES = {
   entretenimiento: ["cine", "netflix", "spotify", "juego", "concierto", "bar", "discoteca", "fiesta", "salida", "evento", "trago", "tragos", "mike's", "mikes", "cerveza", "licor", "ron", "pisco", "shots"],
   salud: ["farmacia", "medicina", "doctor", "médico", "consulta", "pastilla", "vitamina", "clinica", "hospital"],
   ropa: ["ropa", "zapatos", "camisa", "polo", "pantalon", "vestido", "zapatilla", "accesorio"],
-  servicios: ["internet", "luz", "agua", "gas", "teléfono", "celular", "alquiler", "renta", "seguro"],
+  servicios: ["internet", "recibo", "factura", "recibo de agua", "recibo de luz", "recibo de gas", "planilla", "alquiler", "renta", "seguro", "cable", "telefonia", "telefonía"],
   educacion: ["curso", "libro", "universidad", "colegio", "matrícula", "matricula", "útiles", "utiles", "clases", "taller", "capacitación", "capacitacion", "carrera"],
-  mascotas: ["veterinario", "veterinaria", "mascota", "perro", "gato", "comida de perro", "comida de gato", "antiparasitario", "vacuna mascota", "pienso"],
+  mascotas: ["veterinario", "veterinaria", "mascota", "perro", "gato", "comida de perro", "comida de gato", "antiparasitario", "vacuna mascota", "pienso", "chichu", "arena para gato", "collar", "correa", "juguete mascota", "guarderia mascota"],
   viajes: ["hotel", "hospedaje", "vuelo", "pasaje aéreo", "pasaje aereo", "tour", "maleta", "airbnb", "hostal", "agencia", "excursión", "excursion"],
-  deporte: ["gimnasio", "gym", "cancha", "suplemento", "proteína", "proteina", "creatina", "equipo deportivo", "bicicleta", "natación", "natacion", "entrenador"],
+  deporte: ["gimnasio", "gym", "cancha", "suplemento", "proteína", "proteina", "creatina", "equipo deportivo", "bicicleta", "natación", "natacion", "entrenador", "agua de mesa", "agua cielo", "agua san luis", "agua san mateo", "hidratacion", "hidratación"],
   higiene: ["shampoo", "champú", "champu", "jabón", "jabon", "desodorante", "pasta dental", "cepillo", "papel higienico", "papel higiénico", "toalla", "crema", "loción", "locion", "afeitadora", "rasuradora", "hilo dental", "enjuague", "gel", "higiene"],
   otros: []
 };
@@ -177,13 +177,21 @@ export default function GastosTracker() {
     { from:"bot", text:"¡Hola! 👋 Escríbeme lo que gastaste y detecto fecha, monto y categoría automáticamente:\n\n• \"Taxi a Sodoma 29 de mayo 15 soles\"\n• \"Almuerzo 30 ayer\"\n• \"Netflix 35 el lunes\"\n• \"Farmacia 80 28/05\"\n\nSin fecha → uso hoy 📅" }
   ]);
   const [input, setInput] = useState("");
-  const [expenses, setExpenses] = useState([]);
+  const [expenses, setExpenses] = useState(() => {
+    try {
+      const saved = localStorage.getItem("gastosbot_expenses");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch(e) {}
+    return [];
+  });
   const [tab, setTab] = useState("chat");
   const [exporting, setExporting] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-  const [storageReady, setStorageReady] = useState(false);
 
   const [fDateFrom, setFDateFrom] = useState("");
   const [fDateTo, setFDateTo] = useState("");
@@ -195,33 +203,15 @@ export default function GastosTracker() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Load from persistent storage on mount
+  // Save to localStorage whenever expenses change
   useEffect(() => {
-    async function load() {
-      try {
-        const result = await window.storage.get("gastos_expenses");
-        if (result && result.value) {
-          const saved = JSON.parse(result.value);
-          if (Array.isArray(saved) && saved.length > 0) {
-            setExpenses(saved);
-            setMessages(prev => [...prev, { from:"bot", text:`📂 Cargué ${saved.length} gasto(s) de tu sesión anterior.\nTotal guardado: S/ ${saved.reduce((s,e)=>s+e.amount,0).toFixed(2)} 💾` }]);
-          }
-        }
-      } catch(e) {}
-      setStorageReady(true);
-    }
-    load();
-  }, []);
+    try { localStorage.setItem("gastosbot_expenses", JSON.stringify(expenses)); } catch(e) {}
+  }, [expenses]);
 
   // Save to persistent storage whenever expenses change
   useEffect(() => {
     if (!storageReady) return;
     async function save() {
-      try { await window.storage.set("gastos_expenses", JSON.stringify(expenses)); } catch(e) {}
-    }
-    save();
-  }, [expenses, storageReady]);
-
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [messages]);
 
   const filteredExpenses = expenses.filter(e => {
@@ -258,7 +248,16 @@ export default function GastosTracker() {
   }
 
   function deleteExpense(id) { setExpenses(prev=>prev.filter(e=>e.id!==id)); setConfirmDeleteId(null); }
-  function startEdit(e) { setEditingId(e.id); setEditForm({desc:e.desc,amount:e.amount,category:e.category,date:e.date}); }
+  function startEdit(e) {
+    setConfirmDeleteId(null);
+    setEditingId(e.id);
+    setEditForm({
+      desc: String(e.desc || ""),
+      amount: String(e.amount || ""),
+      category: e.category || "otros",
+      date: e.date || fmtDate(new Date())
+    });
+  }
   function saveEdit(id) {
     setExpenses(prev=>prev.map(e=>e.id===id?{...e,...editForm,amount:parseFloat(editForm.amount)||0}:e));
     setEditingId(null);
@@ -352,7 +351,7 @@ export default function GastosTracker() {
               <div style={{textAlign:"center",color:"#aaa",marginTop:60,fontSize:14}}><div style={{fontSize:48}}>📋</div><p>No hay gastos todavía.</p></div>
             ):(<>
               <div style={{padding:"10px 12px 4px",fontSize:11,color:"#999",fontWeight:600}}>{expenses.length} GASTOS</div>
-              {[...expenses].reverse().map(e=>(
+              {[...expenses].sort((a,b)=>b.id-a.id).map(e=>(
                 <div key={e.id} style={{margin:"0 10px 8px",borderRadius:14,background:"#fff",boxShadow:"0 1px 6px rgba(0,0,0,0.07)",overflow:"hidden"}}>
                   {editingId===e.id?(
                     <div style={{padding:12}}>
@@ -441,6 +440,22 @@ export default function GastosTracker() {
                     </div>
                   </div>
                   {activeFilterCount>0&&<button onClick={clearFilters} style={{width:"100%",background:"#fff0f0",color:"#e53935",border:"1.5px solid #ffcdd2",borderRadius:10,padding:"8px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🗑️ Limpiar filtros</button>}
+                  {/* Quick month shortcuts */}
+                  <div style={{marginTop:12}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#555",marginBottom:6}}>📅 EXPORTAR POR MES RÁPIDO</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {Array.from({length:6},(_,i)=>{
+                        const d=new Date(); d.setMonth(d.getMonth()-i);
+                        const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0");
+                        const label=d.toLocaleString("es-PE",{month:"short",year:"numeric"});
+                        const from=`${y}-${m}-01`;
+                        const lastDay=new Date(y,d.getMonth()+1,0).getDate();
+                        const to=`${y}-${m}-${String(lastDay).padStart(2,"0")}`;
+                        const isActive=fDateFrom===from&&fDateTo===to;
+                        return <button key={from} onClick={()=>{setFDateFrom(from);setFDateTo(to);}} style={{background:isActive?"#128C7E":"#f0f0f0",color:isActive?"#fff":"#555",border:"none",borderRadius:16,padding:"5px 12px",fontSize:11,cursor:"pointer",fontWeight:isActive?700:400}}>{label}</button>;
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
