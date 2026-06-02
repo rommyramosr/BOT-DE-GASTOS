@@ -9,7 +9,7 @@ const CATEGORIES = {
   ropa: ["ropa", "zapatos", "camisa", "polo", "pantalon", "vestido", "zapatilla", "accesorio"],
   servicios: ["internet", "luz", "recibo", "factura", "recibo de agua", "recibo de luz", "recibo de gas", "planilla", "alquiler", "renta", "seguro", "cable", "telefonia", "telefonía"],
   educacion: ["curso", "libro", "universidad", "colegio", "matrícula", "matricula", "útiles", "utiles", "clases", "taller", "capacitación", "capacitacion", "carrera"],
-  mascotas: ["veterinario", "veterinaria", "mascota", "perro", "gato", "comida de perro", "comida de chichu", "antiparasitario", "vacuna mascota", "pienso", "chichu", "arena para gato", "collar", "correa", "juguete mascota", "guarderia mascota"],
+  mascotas: ["veterinario", "veterinaria", "mascota", "perro", "gato", "comida de perro", "comida de chichu", "antiparasitario", "vacuna mascota", "pienso", "chichu", "arena para gato", "collar", "correa", "juguete mascota", "guarderia mascota", "platos de chichu"],
   viajes: ["hotel", "hospedaje", "vuelo", "pasaje aéreo", "pasaje aereo", "tour", "maleta", "airbnb", "hostal", "agencia", "excursión", "excursion"],
   deporte: ["gimnasio", "gym", "cancha", "suplemento", "proteína", "proteina", "creatina", "equipo deportivo", "bicicleta", "natación", "natacion", "entrenador", "agua de mesa", "agua cielo", "agua san luis", "agua san mateo", "hidratacion", "hidratación"],
   higiene: ["shampoo", "champú", "champu", "jabón", "jabon", "desodorante", "pasta dental", "cepillo", "papel higienico", "papel higiénico", "toalla", "crema", "loción", "locion", "afeitadora", "rasuradora", "hilo dental", "enjuague", "gel", "higiene"],
