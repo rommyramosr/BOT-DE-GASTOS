@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
 
 const CATEGORIES = {
-  comida: ["comida", "almuerzo", "desayuno", "cena", "restaurante", "cafe", "café", "pizza", "burger", "pollo", "mercado", "supermercado", "snack", "helado", "bebida"],
+  comida: ["comida", "almuerzo", "desayuno", "cena", "restaurante", "cafe", "café", "pizza", "burger", "pollo", "mercado", "supermercado", "hamburguesa", "snack", "helado", "bebida"],
   transporte: ["taxi", "uber", "bus", "metro", "micro", "gasolina", "combustible", "pasaje", "moto", "toll", "peaje"],
   entretenimiento: ["cine", "netflix", "spotify", "juego", "concierto", "bar", "discoteca", "fiesta", "salida", "evento", "trago", "tragos", "mike's", "mikes", "cerveza", "licor", "ron", "pisco", "shots"],
   salud: ["farmacia", "medicina", "doctor", "médico", "consulta", "pastilla", "vitamina", "clinica", "hospital"],
