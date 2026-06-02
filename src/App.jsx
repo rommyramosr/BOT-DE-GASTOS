@@ -172,6 +172,40 @@ const inputStyle = {
   fontSize:13,outline:"none",background:"#fff",width:"100%",boxSizing:"border-box"
 };
 
+function EditForm({expense, onSave, onCancel}) {
+  const [form, setForm] = useState({
+    desc: String(expense.desc || ""),
+    amount: String(expense.amount || ""),
+    category: expense.category || "otros",
+    date: expense.date || fmtDate(new Date())
+  });
+  return (
+    <div style={{padding:12}}>
+      <div style={{fontSize:11,fontWeight:700,color:"#128C7E",marginBottom:8}}>✏️ Cambia solo lo que quieras</div>
+      <div style={{fontSize:10,color:"#999",marginBottom:4}}>Descripción</div>
+      <input value={form.desc} onChange={ev=>setForm(f=>({...f,desc:ev.target.value}))} style={{border:"1.5px solid #e0e0e0",borderRadius:10,padding:"8px 11px",fontSize:13,outline:"none",background:"#fff",width:"100%",boxSizing:"border-box",marginBottom:8}}/>
+      <div style={{display:"flex",gap:8,marginBottom:8}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:10,color:"#999",marginBottom:4}}>Monto (S/)</div>
+          <input type="text" inputMode="decimal" value={form.amount} onChange={ev=>setForm(f=>({...f,amount:ev.target.value}))} style={{border:"1.5px solid #e0e0e0",borderRadius:10,padding:"8px 11px",fontSize:13,outline:"none",background:"#fff",width:"100%",boxSizing:"border-box"}}/>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:10,color:"#999",marginBottom:4}}>Fecha</div>
+          <input type="date" value={displayToIso(form.date)} onChange={ev=>setForm(f=>({...f,date:isoToDisplay(ev.target.value)}))} style={{border:"1.5px solid #e0e0e0",borderRadius:10,padding:"8px 11px",fontSize:13,outline:"none",background:"#fff",width:"100%",boxSizing:"border-box"}}/>
+        </div>
+      </div>
+      <div style={{fontSize:10,color:"#999",marginBottom:4}}>Categoría</div>
+      <select value={form.category} onChange={ev=>setForm(f=>({...f,category:ev.target.value}))} style={{border:"1.5px solid #e0e0e0",borderRadius:10,padding:"8px 11px",fontSize:13,outline:"none",background:"#fff",width:"100%",boxSizing:"border-box",marginBottom:10}}>
+        {CAT_LIST.map(c=><option key={c} value={c}>{CAT_EMOJI[c]} {c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+      </select>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>onSave({...form,amount:parseFloat(form.amount)||0})} style={{flex:1,background:"#25D366",color:"#fff",border:"none",borderRadius:8,padding:"8px",fontWeight:700,cursor:"pointer"}}>✅ Guardar</button>
+        <button onClick={onCancel} style={{flex:1,background:"#eee",color:"#555",border:"none",borderRadius:8,padding:"8px",cursor:"pointer"}}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
 function MonthShortcuts({fDateFrom,fDateTo,setFDateFrom,setFDateTo}) {
   const months=[];
   for(let i=0;i<6;i++){
@@ -268,18 +302,9 @@ export default function GastosTracker() {
   }
 
   function deleteExpense(id) { setExpenses(prev=>prev.filter(e=>e.id!==id)); setConfirmDeleteId(null); }
-  function startEdit(e) {
-    setConfirmDeleteId(null);
-    setEditingId(e.id);
-    setEditForm({
-      desc: String(e.desc || ""),
-      amount: String(e.amount || ""),
-      category: e.category || "otros",
-      date: e.date || fmtDate(new Date())
-    });
-  }
-  function saveEdit(id) {
-    setExpenses(prev=>prev.map(e=>e.id===id?{...e,...editForm,amount:parseFloat(editForm.amount)||0}:e));
+  function startEdit(id) { setConfirmDeleteId(null); setEditingId(id); }
+  function saveEdit(id, form) {
+    setExpenses(prev=>prev.map(e=>e.id===id?{...e,...form}:e));
     setEditingId(null);
   }
 
@@ -374,35 +399,7 @@ export default function GastosTracker() {
               {[...expenses].sort((a,b)=>b.id-a.id).map(e=>(
                 <div key={e.id} style={{margin:"0 10px 8px",borderRadius:14,background:"#fff",boxShadow:"0 1px 6px rgba(0,0,0,0.07)",overflow:"hidden"}}>
                   {editingId===e.id?(
-                    <div style={{padding:12}}>
-                      <div style={{fontSize:11,fontWeight:700,color:"#128C7E",marginBottom:8}}>✏️ EDITANDO — cambia solo lo que quieras</div>
-                      <div style={{fontSize:10,color:"#999",marginBottom:4}}>Descripción</div>
-                      <input value={editForm.desc} onChange={ev=>setEditForm(f=>({...f,desc:ev.target.value}))} placeholder="Descripción" style={{...inputStyle,marginBottom:8}}/>
-                      <div style={{display:"flex",gap:8,marginBottom:8}}>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:10,color:"#999",marginBottom:4}}>Monto (S/)</div>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={editForm.amount}
-                            onChange={ev=>setEditForm(f=>({...f,amount:ev.target.value}))}
-                            style={{...inputStyle}}
-                          />
-                        </div>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:10,color:"#999",marginBottom:4}}>Fecha</div>
-                          <input type="date" value={displayToIso(editForm.date)} onChange={ev=>setEditForm(f=>({...f,date:isoToDisplay(ev.target.value)}))} style={{...inputStyle}}/>
-                        </div>
-                      </div>
-                      <div style={{fontSize:10,color:"#999",marginBottom:4}}>Categoría</div>
-                      <select value={editForm.category} onChange={ev=>setEditForm(f=>({...f,category:ev.target.value}))} style={{...inputStyle,marginBottom:10}}>
-                        {CAT_LIST.map(c=><option key={c} value={c}>{CAT_EMOJI[c]} {c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
-                      </select>
-                      <div style={{display:"flex",gap:8}}>
-                        <button onClick={()=>saveEdit(e.id)} style={{flex:1,background:"#25D366",color:"#fff",border:"none",borderRadius:8,padding:"8px",fontWeight:700,cursor:"pointer"}}>✅ Guardar</button>
-                        <button onClick={()=>setEditingId(null)} style={{flex:1,background:"#eee",color:"#555",border:"none",borderRadius:8,padding:"8px",cursor:"pointer"}}>Cancelar</button>
-                      </div>
-                    </div>
+                    <EditForm expense={e} onSave={(form)=>saveEdit(e.id,form)} onCancel={()=>setEditingId(null)}/>
                   ):confirmDeleteId===e.id?(
                     /* confirm delete inline */
                     <div style={{padding:"12px 14px",background:"#fff5f5",display:"flex",alignItems:"center",gap:10}}>
@@ -418,7 +415,7 @@ export default function GastosTracker() {
                         <div style={{fontSize:11,color:"#999"}}>{e.date} · {e.category.charAt(0).toUpperCase()+e.category.slice(1)}</div>
                       </div>
                       <div style={{fontWeight:800,color:"#128C7E",fontSize:14,flexShrink:0}}>S/ {e.amount.toFixed(2)}</div>
-                      <button onClick={()=>{setEditingId(e.id);setConfirmDeleteId(null);}} style={{background:"#EEF7FF",border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:15,flexShrink:0}}>✏️</button>
+                      <button onClick={()=>{startEdit(e.id);setConfirmDeleteId(null);}} style={{background:"#EEF7FF",border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:15,flexShrink:0}}>✏️</button>
                       <button onClick={()=>{setConfirmDeleteId(e.id);setEditingId(null);}} style={{background:"#FFF0F0",border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:15,flexShrink:0}}>🗑️</button>
                     </div>
                   )}
