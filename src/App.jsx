@@ -172,6 +172,30 @@ const inputStyle = {
   fontSize:13,outline:"none",background:"#fff",width:"100%",boxSizing:"border-box"
 };
 
+function MonthShortcuts({fDateFrom,fDateTo,setFDateFrom,setFDateTo}) {
+  const months=[];
+  for(let i=0;i<6;i++){
+    const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-i);
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0");
+    const label=d.toLocaleString("es-PE",{month:"short",year:"numeric"});
+    const from=`${y}-${m}-01`;
+    const lastDay=new Date(y,d.getMonth()+1,0).getDate();
+    const to=`${y}-${m}-${String(lastDay).padStart(2,"0")}`;
+    const isActive=fDateFrom===from&&fDateTo===to;
+    months.push({from,to,label,isActive});
+  }
+  return (
+    <div style={{marginTop:12}}>
+      <div style={{fontSize:11,fontWeight:700,color:"#555",marginBottom:6}}>📅 EXPORTAR POR MES RÁPIDO</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {months.map(({from,to,label,isActive})=>(
+          <button key={from} onClick={()=>{setFDateFrom(from);setFDateTo(to);}} style={{background:isActive?"#128C7E":"#f0f0f0",color:isActive?"#fff":"#555",border:"none",borderRadius:16,padding:"5px 12px",fontSize:11,cursor:"pointer",fontWeight:isActive?700:400,marginBottom:4}}>{label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function GastosTracker() {
   const [messages, setMessages] = useState([
     { from:"bot", text:"¡Hola! 👋 Escríbeme lo que gastaste y detecto fecha, monto y categoría automáticamente:\n\n• \"Taxi a Sodoma 29 de mayo 15 soles\"\n• \"Almuerzo 30 ayer\"\n• \"Netflix 35 el lunes\"\n• \"Farmacia 80 28/05\"\n\nSin fecha → uso hoy 📅" }
@@ -208,10 +232,6 @@ export default function GastosTracker() {
     try { localStorage.setItem("gastosbot_expenses", JSON.stringify(expenses)); } catch(e) {}
   }, [expenses]);
 
-  // Save to persistent storage whenever expenses change
-  useEffect(() => {
-    if (!storageReady) return;
-    async function save() {
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [messages]);
 
   const filteredExpenses = expenses.filter(e => {
@@ -440,22 +460,7 @@ export default function GastosTracker() {
                     </div>
                   </div>
                   {activeFilterCount>0&&<button onClick={clearFilters} style={{width:"100%",background:"#fff0f0",color:"#e53935",border:"1.5px solid #ffcdd2",borderRadius:10,padding:"8px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🗑️ Limpiar filtros</button>}
-                  {/* Quick month shortcuts */}
-                  <div style={{marginTop:12}}>
-                    <div style={{fontSize:11,fontWeight:700,color:"#555",marginBottom:6}}>📅 EXPORTAR POR MES RÁPIDO</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                      {Array.from({length:6},(_,i)=>{
-                        const d=new Date(); d.setMonth(d.getMonth()-i);
-                        const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0");
-                        const label=d.toLocaleString("es-PE",{month:"short",year:"numeric"});
-                        const from=`${y}-${m}-01`;
-                        const lastDay=new Date(y,d.getMonth()+1,0).getDate();
-                        const to=`${y}-${m}-${String(lastDay).padStart(2,"0")}`;
-                        const isActive=fDateFrom===from&&fDateTo===to;
-                        return <button key={from} onClick={()=>{setFDateFrom(from);setFDateTo(to);}} style={{background:isActive?"#128C7E":"#f0f0f0",color:isActive?"#fff":"#555",border:"none",borderRadius:16,padding:"5px 12px",fontSize:11,cursor:"pointer",fontWeight:isActive?700:400}}>{label}</button>;
-                      })}
-                    </div>
-                  </div>
+                  <MonthShortcuts fDateFrom={fDateFrom} fDateTo={fDateTo} setFDateFrom={setFDateFrom} setFDateTo={setFDateTo}/>
                 </div>
               )}
             </div>
